@@ -16,23 +16,26 @@ def download_case(wenshu):
     download_list = ['Y'] * len(wenshu.case['name'])
     print(len(download_list))
     for i in range(len(wenshu.case['name'])):
-        print(i)
+        #print(i)
         file_name = 'Download/' + wenshu.case['name'][i] + wenshu.case['date'][i] + '.docx'
-        if not os.path.exists(file_name): 
+        if not os.path.exists(file_name):
+            print(i)
             wenshu.downloadDocument(wenshu.case['name'][i],
                                     wenshu.case['id'][i],
                                     wenshu.case['date'][i])
         else:
-            print('file %s exist, skip...' % file_name)   
+            pass
+        #    print('file %s exist, skip...' % file_name)   
         #if os.path.exists(file_name):
         #    os.rename(file_name, 'Download1/' + str(i+2) + '_' + wenshu.case['name'][i] + wenshu.case['date'][i] + '.docx')
         docsize = os.path.getsize(file_name)
         # if docsize < 80k, it may corrupt. resend request.
-        print('docsize is %s' % docsize)
+        #print('docsize is %s' % docsize)
         if docsize < 80000:
             #input("Refresh the Page and Enter:")
             #time.sleep(10)
             print('file %s is invalid' % file_name)
+            print(i)
             wenshu.downloadDocument(wenshu.case['name'][i],
                                     wenshu.case['id'][i],
                                     wenshu.case['date'][i])
@@ -70,12 +73,15 @@ def read_csv():
     return name_list
 
 
-def get_case_1st_id(case_2nd_list):
-    id_1st_list = []
-    for case in case_2nd_list:
-        doc = read_doc(case + '.docx')
-        id_1st_list.append(process_doc_data(doc))
-    return id_1st_list
+def get_case_1st_id(wenshu):
+    id_1st_list = ['None'] * len(wenshu.case['name'])
+    for i in range(len(wenshu.case['name'])):
+        file_name = 'Download/' + wenshu.case['name'][i] + wenshu.case['date'][i] + '.docx'    
+        if wenshu.case['download'][i] == 'Y':
+            print('Processing document %s %s '%(i, wenshu.case['name'][i]))
+            doc = read_doc(file_name)
+            id_1st_list[i] = process_doc_data(doc)
+    wenshu.case['id1'] = id_1st_list
 
 
 def read_doc(doc_name=None):
@@ -94,10 +100,22 @@ def read_doc(doc_name=None):
 
 
 def process_doc_data(doc_data=None):
-    id_1st = re.search('.\d\d\d\d.\w+民初字第\d+号(?=民事判决)', doc_data)
-    return id_1st.group()
-
-
+    #id_1st = re.search('.\d\d\d\d.\w+民.?初字第\d+号(?=民事判决)', doc_data)
+    #if id_1st:
+    #    return id_1st.group()
+    #else:
+    #    id_1st = re.search('.\d\d\d\d.\w+民.?初.?\d+号(?=民事)', doc_data)
+    #    if id_1st:
+    #        return id_1st.group()
+    #    else:
+    #        return 'None'
+    id_1st = re.search('.\d\d\d\d.\w+?民.?初.+?号', doc_data)
+    if id_1st:
+        return id_1st.group()
+    else:
+        return 'None'
+        
+        
 def search_and_download(case):
     doc_exist = []
     for id in case['id1']:
@@ -115,36 +133,27 @@ def search_and_download(case):
 
 
 def dump2csv(wenshu, surfix):
-    with open('case' + surfix + '.csv', 'w', newline='', encoding='utf-8') as csvfile:
-        csvfile.write(u'\ufeff')
-        fieldnames = dict.fromkeys(wenshu.case)
-        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-        writer.writeheader()
-        if surfix == 'phase1':
-            for i in range(len(wenshu.case['name'])):
-                writer.writerow({'name': wenshu.case['name'][i],
-                                'id': wenshu.case['id'][i],
-                                'date': wenshu.case['date'][i]})
-        elif surfix == 'phase2':
-            for i in range(len(wenshu.case['name'])):
-                writer.writerow({'name': wenshu.case['name'][i],
-                                'id': wenshu.case['id'][i],
-                                'date': wenshu.case['date'][i],
-                                'download': wenshu.case['download'][i]})
-        else:
-            print('%s not specified.' % surfix)
+    with open('case' + surfix + '.csv', 'w', newline='', encoding='utf-8_sig') as csvfile:
+        #csvfile.write(u'\ufeff')
+        writer = csv.writer(csvfile)
+        writer.writerow(wenshu.case.keys())
+        writer.writerows(zip(*wenshu.case.values()))
 
-def read_csv(wenshu):
-    with open('case.csv', encoding='utf-8') as csvfile:
+
+def read_csv(wenshu, surfix):
+    with open('case' + surfix + '.csv', encoding='utf-8_sig') as csvfile:
         reader = csv.DictReader(csvfile)
         case = dict.fromkeys(reader.fieldnames)
         for key in case:
             case[key] = []
-        
+        print(case)
         for row in reader:
             for key in case:
                 case[key].append(row[key])
-    case['name'] = case.pop('\ufeffname')            
+    #for key in case:
+    #    if 'ufeff' in key:
+    #        print(key)
+    #case['name'] = case.pop('\ufeffname')            
     wenshu.case = case
             
 # Phase 1: Search and get 2nd case list, download all of them,
@@ -157,10 +166,24 @@ def phase1(wenshu):
 
 def phase2(wenshu):
     # Read csv file and get case list.
-    read_csv(wenshu)
+    read_csv(wenshu, 'phase1')
     download_case(wenshu)
     dump2csv(wenshu,'phase2')
 
+def phase3(wenshu):
+    read_csv(wenshu, 'phase2')
+    get_case_1st_id(wenshu)
+    dump2csv(wenshu,'phase3')
+    
+    
+def phase4(wenshu):
+    file_name = 'Download/陈某与熊某离婚纠纷二审民事判决书2016-06-27.docx'
+    doc = read_doc(file_name)
+    print(doc)
+    id_1st = re.search('.\d\d\d\d.\w+?民.?初.+?号', doc)
+    print(id_1st)
+
+    
 def main():
     desc = "Select a phase to run"
     parser = argparse.ArgumentParser(description=desc)
@@ -183,10 +206,12 @@ def main():
     elif args.phase == '2':
         print('phase 2')
         phase2(wenshu)
-        #docsize = os.path.getsize('唐某某与董某某离婚纠纷二审民事判决书.docx')
-        #print(docsize)
     elif args.phase == '3':
         print('phase 3')
+        phase3(wenshu)
+    elif args.phase == '4':
+        print('phase 4')
+        phase4(wenshu)
     else:
         print('invalid')
 
@@ -213,6 +238,9 @@ def main():
 #    case['exist'] = search_and_download(case)
 
 #    write_2_csv(case)
+
+# Debug doc regression
+     
 
 if __name__ == "__main__":
     main()
