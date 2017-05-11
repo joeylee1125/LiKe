@@ -14,7 +14,9 @@ class WenShu:
         self.headers = {'User-Agent':self.user_agent }
         self.search_criteria = ''
         self.download_conditions = ''
-        self.item_in_page = '5'
+        self.item_in_page = '20'
+        self.total_items = ''
+        self.case = {}
         self.search_url = 'http://wenshu.court.gov.cn/List/ListContent'
         self.download_url = 'http://wenshu.court.gov.cn/CreateContentJS/CreateListDocZip.aspx?action=1'
         self.data = {'Param':self.search_criteria,\
@@ -22,7 +24,8 @@ class WenShu:
                      'Page':self.item_in_page,\
                      'Order':'法院层级',\
                      'Direction':'asc'}
-     
+
+
     def setSearchCriteria(self, search_criteria):
         self.search_criteria = search_criteria
         self.data = {'Param':self.search_criteria,\
@@ -30,12 +33,12 @@ class WenShu:
                      'Page':self.item_in_page,\
                      'Order':'法院层级',\
                      'Direction':'asc'}
-    def setDownloadConditions(self, download_conditions):
-        self.download_conditions = download_conditions
-    
-    def getSearchCriteria(self):
-        return self.search_criteria
-            
+
+
+    def setDownloadConditions(self):
+        self.download_conditions = self.search_criteria.replace(':', '为').replace(',', '且')
+
+
     def getContent(self, maxPage):
         for index in range(1, maxPage+1):
             print("Page %s" % index)
@@ -54,13 +57,15 @@ class WenShu:
         condition = urllib.parse.quote(self.download_conditions)
         data = {'conditions':condition,'docIds':docIds,'keyCode':''}
         r = requests.post(self.download_url, headers = self.headers, data = data)
-        
-        print(r.status_code)
-        print("Downloading case %s"%(name))
-        with open(name + ".docx", "wb") as word_doc:
-            word_doc.write(r.content)
+       
+        if r.status_code != 200: 
+            print(r.status_code)
+        else:
+            print("Downloading case %s"%(name))
+            with open('Download/' + name + date + ".docx", "wb") as word_doc:
+                word_doc.write(r.content)
             
-    def getTotalItems(self):
+    def getTotalItemNumber(self):
         r = requests.post(self.search_url, headers=self.headers, data=self.data)
         raw = r.json()
         if raw == 'remind':
@@ -70,23 +75,28 @@ class WenShu:
             raw = r.json()
         pattern = re.compile('"Count":"([0-9]+)"', re.S)
         total_number = re.findall(pattern, raw)
-        return int(total_number[0]) if total_number else 0
+        self.total_items = int(total_number[0]) if total_number else 0
     
     def getCaseList(self, total_items):
-        case = {}
         name_list = []
         date_list = []
         id_list = []
-        #max_page = total_items // 20
-        #for index in range(1, max_page + 1):
-        for index in range(1, 2):
-            print(index)
+        max_page = (total_items // int(self.item_in_page)) + 1
+        for index in range(1, max_page + 1):
+        #for index in range(1, 2):
+            print("Get Case list on page %s" % index)
             self.data['Index'] = index
             r = requests.post(self.search_url, headers=self.headers, data=self.data)
-            raw = r.json()
+            try:
+                raw = r.json()
+            except:
+                print('exception catch, re-send request.')
+                self.handleValidateCode()
+                r = requests.post(self.search_url, headers=self.headers, data=self.data)
+                raw = r.json()
             if raw == 'remind':
                 self.handleValidateCode()
-                # re-send requests
+                # If blocked by website, hold and refresh manually, and then re-send requests
                 r = requests.post(self.search_url, headers=self.headers, data=self.data)
                 raw = r.json()
             pattern_name = re.compile('"案件名称":"(.*?)"', re.S)
@@ -95,10 +105,9 @@ class WenShu:
             id_list += re.findall(pattern_id, raw)
             pattern_date = re.compile('"裁判日期":"(.*?)"', re.S)
             date_list += re.findall(pattern_date,raw)
-        case['name'] = name_list
-        case['id'] = id_list
-        case['date'] = date_list
-        return case    
+        self.case['name'] = name_list
+        self.case['id'] = id_list
+        self.case['date'] = date_list
     
     def getHomePage(self, url):
         res = requests.get(url)
@@ -113,12 +122,9 @@ class WenShu:
         #记录开始时间
         begin_time = datetime.datetime.now()
         url = 'http://wenshu.court.gov.cn/List/ListContent'
-        #data={'Param':'案件类型:民事案件,全文检索:离婚,裁判年份:2016,审判程序:二审,关键词:抚养费', 'Index': index,'Page':'20','Order':'法院层级','Direction':'asc'}
         self.data['Index'] = index
         r = requests.post(url, headers = self.headers, data = self.data)
         raw=r.json()
-        #with open('raw_output.txt', 'wb') as f:
-        #    f.write(r.text.encode("utf-8"))
 
         pattern1 = re.compile('"裁判日期":"(.*?)"', re.S)
         self.date = re.findall(pattern1,raw.encode("utf-8"))
@@ -137,7 +143,6 @@ class WenShu:
         
         pattern6 = re.compile('"审判程序":"(.*?)"', re.S)
         self.procedure = re.findall(pattern6,raw.encode("utf-8"))
-        
         
         pattern7 = re.compile('"法院名称":"(.*?)"', re.S)
         self.court = re.findall(pattern7,raw.encode("utf-8"))
