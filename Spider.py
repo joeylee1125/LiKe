@@ -52,7 +52,7 @@ class WenShu:
                     writer.writerow(item)
 
                     
-    def downloadDocument(self, name, id, date):
+    def downloadDocument(self, path, name, id, date):
         docIds = id + '|' + name + '|' + date
         condition = urllib.parse.quote(self.download_conditions)
         data = {'conditions':condition,'docIds':docIds,'keyCode':''}
@@ -62,7 +62,7 @@ class WenShu:
             print(r.status_code)
         else:
             print("Downloading case %s"%(name))
-            with open('Download/' + name + date + ".docx", "wb") as word_doc:
+            with open(path + name + date + ".docx", "wb") as word_doc:
                 word_doc.write(r.content)
             
     def getTotalItemNumber(self):
@@ -81,6 +81,7 @@ class WenShu:
         name_list = []
         date_list = []
         id_list = []
+        case_id_list = []
         max_page = (total_items // int(self.item_in_page)) + 1
         for index in range(1, max_page + 1):
         #for index in range(1, 2):
@@ -105,9 +106,14 @@ class WenShu:
             id_list += re.findall(pattern_id, raw)
             pattern_date = re.compile('"裁判日期":"(.*?)"', re.S)
             date_list += re.findall(pattern_date,raw)
+            
+            pattern_case_id = re.compile('"案号":"(.*?)"', re.S)
+            case_id_list += re.findall(pattern_case_id, raw)
+            #print(case_id_list)
         self.case['name'] = name_list
         self.case['id'] = id_list
         self.case['date'] = date_list
+        self.case['case_id'] = case_id_list
     
     def getHomePage(self, url):
         res = requests.get(url)
